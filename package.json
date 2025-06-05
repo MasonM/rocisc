@@ -1,0 +1,23 @@
+{
+  "name": "rocisc",
+  "version": "1.0.0",
+  "description": "Simple CLI tool to display statistics and enforce limits for Docker/OCI images",
+  "homepage": "https://github.com/MasonM/rocisc#readme",
+  "bugs": {
+    "url": "https://github.com/MasonM/rocisc/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasonM/rocisc.git"
+  },
+  "license": "MIT",
+  "author": "Mason Malone",
+  "type": "module",
+  "main": "rocisc.ts",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29"
+  }
+}

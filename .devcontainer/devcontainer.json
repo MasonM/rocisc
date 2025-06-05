@@ -1,0 +1,26 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/base:1.2.4-ubuntu-24.04@sha256:4c8b0c0465d6452808c2c97920da968fee7a128ba3bcdf2c79e2b6684c9b65dc",
+  "hostRequirements": {
+    "cpus": 4
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "24"
+    },
+    "ghcr.io/jsburckhardt/devcontainer-features/skopeo:1": {}
+  },
+  "containerEnv": {
+    "NODE_OPTIONS": "--disable-warning=ExperimentalWarning"
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "nodejs-testing.extensions": [{"extensions": ["ts"], "parameters": []}]
+      },
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "connor4312.nodejs-testing"
+      ]
+    }
+  }
+}
