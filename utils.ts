@@ -11,7 +11,7 @@ export class ImageRef {
   }
 
   forRef(reference: string): ImageRef { return new ImageRef(this.repository, reference); }
-  toString(): String { return `${this.repository}:${this.reference}`; }
+  toString(): string { return `${this.repository}:${this.reference}`; }
 
   static FromEncodedString(imageRef: string) {
     // Doesn't seem to be standardized. Dockerism?
@@ -42,30 +42,65 @@ export class ImageStatistics {
     this.imageRef = imageRef;
   }
 
+  compare(newImageStats: ImageStatistics): ImageStatsDataObject{
+    return new ImageStatsDataObject(
+      'Delta',
+      (newImageStats.totalLayers - this.totalLayers),
+      (newImageStats.totalCompressedSize - this.totalCompressedSize),
+      (newImageStats.totalUncompressedSize - this.totalUncompressedSize),
+      (1 - (newImageStats.totalUncompressedSize / this.totalUncompressedSize)),
+    );
+  }
+
   get totalCompressedSize(): number{ return totalArray(this.compressedSizes); }
   get totalUncompressedSize(): number { return totalArray(this.uncompressedSizes); }
   get totalLayers(): number { return this.compressedSizes.length; }
   get spaceSavings(): number { return 1 - (this.totalCompressedSize / this.totalUncompressedSize); }
 
-  get toTabularDataObject() {
+  toTabularDataObject(baseline?: ImageStatistics): ImageStatsDataObject {
+    return new ImageStatsDataObject(
+      this.imageRef.toString(),
+      this.totalLayers,
+      this.totalCompressedSize,
+      this.totalUncompressedSize,
+      this.spaceSavings,
+      baseline);
+  }
+}
+
+export class ImageStatsDataObject {
+  readonly 'Image': string;
+  readonly 'Num Layers': string;
+  readonly 'Compressed Size': string;
+  readonly 'Uncompressed Size': string;
+  readonly 'Space Savings': string;
+
+  constructor(image: string, numLayers: number, compressedSize: number, uncompressedSize: number, spaceSavings: number, baseline?: ImageStatistics) {
     const byteFormatter = new Intl.NumberFormat(undefined, {
       unit: 'byte',
       style: 'unit',
       unitDisplay: 'narrow',
       notation: 'compact',
       maximumSignificantDigits: 4,
-    })
+    });
     const percentFormatter = new Intl.NumberFormat(undefined, {
       style: 'percent',
       maximumSignificantDigits: 4,
     });
-    return {
-      'Image': this.imageRef.toString(),
-      'Num Layers': this.totalLayers,
-      'Compressed Size': byteFormatter.format(this.totalCompressedSize),
-      'Uncompressed Size': byteFormatter.format(this.totalUncompressedSize),
-      'Space Savings': percentFormatter.format(this.spaceSavings),
+    this['Image'] = image;
+    this['Num Layers'] = numLayers + (baseline ? ` (${this.deltaFormat(baseline.totalLayers, numLayers)})` : '');
+    this['Compressed Size'] = byteFormatter.format(compressedSize) + (baseline ? ` (${this.deltaFormat(baseline.totalCompressedSize, compressedSize)})` : '');
+    this['Uncompressed Size'] = byteFormatter.format(uncompressedSize) + (baseline ? ` (${this.deltaFormat(baseline.totalUncompressedSize, uncompressedSize)})` : '');;
+    this['Space Savings'] = percentFormatter.format(spaceSavings);
+  }
+
+  deltaFormat(first: number, second: number): string {
+    let out: string = '';
+    if (second >= first) {
+      out + '+';
     }
+    out += `${second - first}`;
+    return out
   }
 }
 

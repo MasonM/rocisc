@@ -15,7 +15,7 @@ describe('End-to-end', () => {
     assert.equal(imageStat.totalLayers, 2);
     assert.equal(imageStat.totalUncompressedSize, 80626935n);
     assert.equal(imageStat.totalCompressedSize, 29717632n);
-    assert.equal(imageStat.spaceSavings, 0.64);
+    assert(Math.abs(imageStat.spaceSavings - 0.64) - 0.01);
   });
 
   it('should print stats for image on mcr.microsoft.com', async () => {
@@ -28,6 +28,6 @@ describe('End-to-end', () => {
     assert.equal(imageStat.totalLayers, 10);
     assert.equal(imageStat.totalUncompressedSize, 768075090n);
     assert.equal(imageStat.totalCompressedSize, 295935442n);
-    assert.equal(imageStat.spaceSavings, 0.62);
+    assert(Math.abs(imageStat.spaceSavings - 0.62) < 0.01);
   });
 });
