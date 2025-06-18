@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { RegistryClient, ImageRef, Platform, enableGlobalDebug } from './utils.ts';
+import { RegistryClient, ImageRef, Platform, enableGlobalDebug, ImageStatistics, printTable } from './utils.ts';
 
 const { values, positionals } = parseArgs({
   options: {
@@ -35,26 +35,31 @@ if (positionals.length < 2) {
 if (values.debug) {
   enableGlobalDebug();
 }
+
 const parsedImageRefs = positionals.map(ImageRef.FromEncodedString);
+let deltaBytes: number | undefined = undefined;
+if (values.maxUncompressedDelta !== '0') {
+  deltaBytes = parseInt(values.maxUncompressedDelta, 10);
+  if (Number.isNaN(deltaBytes)) {
+    throw new Error(`Invalid delta: ${values.maxUncompressedDelta}`);
+  }
+}
+
 const platform = new Platform(values.arch, values.os);
 const registry = new RegistryClient(values.registry, process.env.AUTHORIZATION);
 await registry.tryAuthenticate(parsedImageRefs);
 const imageStats = await Promise.all(parsedImageRefs.map(imageRef => registry.getImageStatistics(platform, imageRef)));
-const imageDataObjects = imageStats.map((stats, index) => stats.toTabularDataObject(index == 0 ? undefined : imageStats[0]));
+console.log(printTable(imageStats));
 
-console.table(imageDataObjects);
-if (values.maxUncompressedDelta !== '0') {
-  const deltaBytes = parseInt(values.maxUncompressedDelta, 10);
-  if (Number.isNaN(deltaBytes)) {
-    throw new Error(`Invalid delta: ${values.maxUncompressedDelta}`);
-  }
-
-  if (!imageStats.every((imageStat, index) => {
-    if (index === 0) {
-      return true;
+if (deltaBytes) {
+  for (const [i, imageStat] of imageStats.entries()) {
+    if (i == 0) {
+      continue;
     }
-    return (imageStat.totalUncompressedSize - imageStats[0].totalUncompressedSize) <= deltaBytes;
-  })) {
-    throw new Error(`Delta exceeded`);
+    const delta = imageStat['Uncompressed Size'] - imageStats[0]['Uncompressed Size'];
+    if (delta > deltaBytes) {
+      console.error(`ERROR: Delta exceeded: ${imageStat['Image']} is ${delta} larger than ${imageStats[0]['Image']}`);
+      process.exit(1);
+    }
   }
 }

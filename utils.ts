@@ -32,6 +32,29 @@ export class ImageRef {
 type ImageManifest = Record<string, any>;
 
 const totalArray = (arr: number[]): number => arr.reduce((a, b) => a + b, 0);
+const byteFormatter = new Intl.NumberFormat(undefined, {
+  unit: 'byte',
+  style: 'unit',
+  unitDisplay: 'narrow',
+  notation: 'compact',
+  maximumSignificantDigits: 4,
+});
+const percentFormatter = new Intl.NumberFormat(undefined, {
+  style: 'percent',
+  maximumSignificantDigits: 4,
+});
+function deltaFormat(first: number, second: number): string {
+  if (first === second) {
+    return '';
+  }
+  let out: string = ' (';
+  if (second >= first) {
+    out += '+';
+  }
+  out += percentFormatter.format((second - first) / first);
+  return out + ')';
+}
+
 
 export class ImageStatistics {
   readonly imageRef: ImageRef;
@@ -42,66 +65,112 @@ export class ImageStatistics {
     this.imageRef = imageRef;
   }
 
-  compare(newImageStats: ImageStatistics): ImageStatsDataObject{
-    return new ImageStatsDataObject(
-      'Delta',
-      (newImageStats.totalLayers - this.totalLayers),
-      (newImageStats.totalCompressedSize - this.totalCompressedSize),
-      (newImageStats.totalUncompressedSize - this.totalUncompressedSize),
-      (1 - (newImageStats.totalUncompressedSize / this.totalUncompressedSize)),
-    );
+  get 'Image'(): string { return this.imageRef.toString(); }
+  get 'Num Layers'(): number { return this.compressedSizes.length; }
+  get 'Compressed Size'(): number { return totalArray(this.compressedSizes); }
+  get 'Uncompressed Size'(): number { return totalArray(this.uncompressedSizes); }
+  get 'Space Savings'(): number { return 1 - (this['Compressed Size'] / this['Uncompressed Size']); }
+}
+
+type TableColName = 'Image' | 'Num Layers' | 'Compressed Size' | 'Uncompressed Size' | 'Compressed Size' | 'Space Savings';
+
+class TableColFormatter {
+  title: TableColName;
+  maxLength: number;
+  rows: string[];
+
+  constructor(title: TableColName) {
+    this.title = title;
+    this.maxLength = title.length;
+    this.rows = [];
   }
 
-  get totalCompressedSize(): number{ return totalArray(this.compressedSizes); }
-  get totalUncompressedSize(): number { return totalArray(this.uncompressedSizes); }
-  get totalLayers(): number { return this.compressedSizes.length; }
-  get spaceSavings(): number { return 1 - (this.totalCompressedSize / this.totalUncompressedSize); }
-
-  toTabularDataObject(baseline?: ImageStatistics): ImageStatsDataObject {
-    return new ImageStatsDataObject(
-      this.imageRef.toString(),
-      this.totalLayers,
-      this.totalCompressedSize,
-      this.totalUncompressedSize,
-      this.spaceSavings,
-      baseline);
+  add(stats: ImageStatistics, baseline?: ImageStatistics) {
+    let row = '';
+    let showDelta = false;
+    switch (this.title) {
+      case 'Image':
+        row += stats[this.title];
+        break;
+      case 'Num Layers':
+        row += stats[this.title].toString();
+        showDelta = true;
+        break;
+      case 'Uncompressed Size':
+      case 'Compressed Size':
+        row += byteFormatter.format(stats[this.title]);
+        showDelta = true;
+        break;
+      case 'Space Savings':
+        row += percentFormatter.format(stats[this.title]);
+        break;
+    }
+    if (showDelta && baseline) {
+      row += deltaFormat(baseline[this.title] as number, stats[this.title] as number);
+    }
+    if (row.length > this.maxLength) {
+      this.maxLength = row.length;
+    }
+    this.rows.push(row);
   }
 }
 
-export class ImageStatsDataObject {
-  readonly 'Image': string;
-  readonly 'Num Layers': string;
-  readonly 'Compressed Size': string;
-  readonly 'Uncompressed Size': string;
-  readonly 'Space Savings': string;
+export function printTable(imageStats: ImageStatistics[]) {
+  const cols = [
+    new TableColFormatter('Image'),
+    new TableColFormatter('Num Layers'),
+    new TableColFormatter('Compressed Size'),
+    new TableColFormatter('Uncompressed Size'),
+    new TableColFormatter('Space Savings'),
+  ];
 
-  constructor(image: string, numLayers: number, compressedSize: number, uncompressedSize: number, spaceSavings: number, baseline?: ImageStatistics) {
-    const byteFormatter = new Intl.NumberFormat(undefined, {
-      unit: 'byte',
-      style: 'unit',
-      unitDisplay: 'narrow',
-      notation: 'compact',
-      maximumSignificantDigits: 4,
-    });
-    const percentFormatter = new Intl.NumberFormat(undefined, {
-      style: 'percent',
-      maximumSignificantDigits: 4,
-    });
-    this['Image'] = image;
-    this['Num Layers'] = numLayers + (baseline ? ` (${this.deltaFormat(baseline.totalLayers, numLayers)})` : '');
-    this['Compressed Size'] = byteFormatter.format(compressedSize) + (baseline ? ` (${this.deltaFormat(baseline.totalCompressedSize, compressedSize)})` : '');
-    this['Uncompressed Size'] = byteFormatter.format(uncompressedSize) + (baseline ? ` (${this.deltaFormat(baseline.totalUncompressedSize, uncompressedSize)})` : '');;
-    this['Space Savings'] = percentFormatter.format(spaceSavings);
-  }
-
-  deltaFormat(first: number, second: number): string {
-    let out: string = '';
-    if (second >= first) {
-      out + '+';
+  const baseline = imageStats[0];
+  for (const [i, stats] of imageStats.entries()) {
+    for (const col of cols) {
+      col.add(stats, i > 0 ? baseline : undefined);
     }
-    out += `${second - first}`;
-    return out
   }
+  const totalColWidth = cols.reduce((curr: number, col1: TableColFormatter): number => curr + col1.maxLength + 3, 1);
+  let table = '';
+  let first = true;
+  for (const [i, col] of cols.entries()) {
+    table += first ? '┌' : '┬';
+    first = false;
+    table += '─'.repeat(col.maxLength + 2);
+  }
+  table += '┐\n';
+
+  table += '│';
+  for (const col of cols) {
+    table += ` ${col.title.padEnd(col.maxLength)} │`
+  }
+  table += '\n';
+
+  first = true;
+  for (const [i, col] of cols.entries()) {
+    table += first ? '├' : '┼';
+    first = false;
+    table += '─'.repeat(col.maxLength + 2);
+  }
+  table += '┤\n';
+
+  for (let i = 0; i < cols[0].rows.length; i++) {
+    table += '│';
+    for (const col of cols) {
+      table += ` ${col.rows[i].padEnd(col.maxLength)} │`
+    }
+    table += '\n';
+  }
+
+  first = true;
+  for (const [i, col] of cols.entries()) {
+    table += first ? '└' : '┴';
+    first = false;
+    table += '─'.repeat(col.maxLength + 2);
+  }
+  table += '┘\n';
+
+  return table;
 }
 
 // Reference: https://github.com/opencontainers/image-spec/blob/v1.0.1/image-index.md
@@ -147,7 +216,7 @@ async function fetchWrapper(url: URL, options: globalThis.RequestInit = {}, thro
 }
 
 export class RegistryClient {
-  protected readonly registry: string;
+  protected readonly baseUrl: string;
   protected authorization?: string;
   // Source: https://github.com/moby/moby/blob/59bdc72463bbbf236f9113e0c1fb2f95a1fbb6e5/registry/config.go#L39-L45
   static readonly DockerHub = 'https://registry-1.docker.io';
@@ -170,8 +239,8 @@ export class RegistryClient {
     'application/vnd.docker.image.rootfs.foreign.diff.tar.gzip',
   ];
 
-  constructor(registry: string, authorization?: string) {
-    this.registry = registry;
+  constructor(baseUrl: string, authorization?: string) {
+    this.baseUrl = baseUrl;
     this.authorization = authorization;
   }
 
@@ -184,7 +253,7 @@ export class RegistryClient {
     // Not standardized?
     // "This endpoint MAY be used for authentication/authorization purposes, but this is out of the purview of this specification."
     // - https://github.com/opencontainers/distribution-spec/blob/main/spec.md#api
-    const response = await fetchWrapper(new URL('/v2/', this.registry), {}, false);
+    const response = await fetchWrapper(new URL('/v2/', this.baseUrl), {}, false);
     if (response.status === 401) {
       const wwwAuthenticate = response.headers.get('www-authenticate');
       if (wwwAuthenticate) {
@@ -204,7 +273,7 @@ export class RegistryClient {
   }
 
   async request(urlPath: string, headers: globalThis.HeadersInit = {}): Promise<globalThis.Response> {
-    return fetchWrapper(new URL(urlPath, this.registry), {
+    return fetchWrapper(new URL(urlPath, this.baseUrl), {
       headers: {
         ...headers,
         ...(this.authorization ? { Authorization: this.authorization } : {}),
@@ -220,8 +289,9 @@ export class RegistryClient {
   }
 
   // Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#pulling-blobs
-  async getBlob(imageRef: ImageRef, headers={}): Promise<globalThis.Response> {
-    return this.request(`/v2/${imageRef.repository}/blobs/${imageRef.reference}`, headers);
+  async getBlob(imageRef: ImageRef, headers={}): Promise<ArrayBuffer> {
+    return this.request(`/v2/${imageRef.repository}/blobs/${imageRef.reference}`, headers)
+      .then(response => response.arrayBuffer())
   }
 
   async getImageStatistics(platform: Platform, imageRef: ImageRef): Promise<ImageStatistics> {
@@ -246,12 +316,6 @@ export class RegistryClient {
 
     details.compressedSizes.push(manifest.config.size);
     details.uncompressedSizes.push(manifest.config.size);
-    /*
-    // TODO: Do we really need to fetch the config?
-    promises.push(this.getBlob(imageRef.forRef(manifest.config.digest))
-      .then(response => response.json())
-      .then(config => details.config = config));
-    */
 
     await Promise.all(promises);
 
@@ -269,14 +333,13 @@ export class RegistryClient {
         case 'application/vnd.oci.image.layer.nondistributable.v1.tar+gzip':
         case 'application/vnd.oci.image.layer.v1.tar+gzip':
           // Reference: http://www.zlib.org/rfc-gzip.html
+          // TODO: Handle estargz
           return this.getBlob(baseImageRef.forRef(layer.digest), { Range: 'bytes=-4' })
-            .then(response => response.arrayBuffer())
             .then(buffer => new Uint32Array(buffer)[0]);
         case 'application/vnd.oci.image.layer.nondistributable.v1.tar+zstd':
         case 'application/vnd.oci.image.layer.v1.tar+zstd':
           // Reference: https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md
           return this.getBlob(baseImageRef.forRef(layer.digest), { Range: 'bytes=0-18' })
-            .then(response => response.arrayBuffer())
             .then(buffer => parseZstandardHeader(buffer));
         default:
           throw new Error(`Unrecognized media type ${layer.mediaType}`);
