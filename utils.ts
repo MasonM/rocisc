@@ -57,29 +57,21 @@ function deltaFormat(first: number, second: number): string {
 
 
 export class ImageStatistics {
-  readonly imageRef: ImageRef;
-  compressedSizes: number[] = [];
-  uncompressedSizes: number[] = [];
-
-  constructor(imageRef: ImageRef) {
-    this.imageRef = imageRef;
+  constructor(imageRef: ImageRef, compressedSizes: number[], uncompressedSizes: number[]) {
+    this['Image'] = imageRef.toString();
+    this['Num Layers'] = compressedSizes.length;
+    this['Compressed Size'] = totalArray(compressedSizes);
+    this['Uncompressed Size'] = totalArray(uncompressedSizes);
+    this['Space Savings'] = 1 - (this['Compressed Size'] / this['Uncompressed Size']);
   }
-
-  get 'Image'(): string { return this.imageRef.toString(); }
-  get 'Num Layers'(): number { return this.compressedSizes.length; }
-  get 'Compressed Size'(): number { return totalArray(this.compressedSizes); }
-  get 'Uncompressed Size'(): number { return totalArray(this.uncompressedSizes); }
-  get 'Space Savings'(): number { return 1 - (this['Compressed Size'] / this['Uncompressed Size']); }
 }
 
-type TableColName = 'Image' | 'Num Layers' | 'Compressed Size' | 'Uncompressed Size' | 'Compressed Size' | 'Space Savings';
-
 class TableColFormatter {
-  title: TableColName;
+  title: string;
   maxLength: number;
   values: string[];
 
-  constructor(title: TableColName) {
+  constructor(title: string) {
     this.title = title;
     this.maxLength = title.length;
     this.values = [];
@@ -116,18 +108,13 @@ class TableColFormatter {
 }
 
 export function printTable(imageStats: ImageStatistics[]) {
-  const cols = [
-    new TableColFormatter('Image'),
-    new TableColFormatter('Num Layers'),
-    new TableColFormatter('Compressed Size'),
-    new TableColFormatter('Uncompressed Size'),
-    new TableColFormatter('Space Savings'),
-  ];
-
   const baseline = imageStats[0];
-  for (const [i, stats] of imageStats.entries()) {
+
+  const cols = Object.getOwnPropertyNames(baseline).map(prop => new TableColFormatter(prop));
+
+  for (const stats of imageStats) {
     for (const col of cols) {
-      col.add(stats, i > 0 ? baseline : undefined);
+      col.add(stats, imageStats[0]);
     }
   }
 
@@ -276,22 +263,23 @@ export class RegistryClient {
       throw new Error(`Failed to find manifest for os ${platform.os} and architecture ${platform.architecture} for image ${imageRef.repository}:${imageRef.reference}`);
     }
     const manifest = await this.getManifest(imageRef.forRef(manifestDigest.digest));
-    const details = new ImageStatistics(imageRef);
+    const uncompressedSizes: number[] = [];
+    const compressedSizes: number[] = [];
 
     // Parallelize requests for performance
     const promises: Promise<any>[] = [];
     for (const layer of manifest.layers) {
-      details.compressedSizes.push(layer.size);
+      compressedSizes.push(layer.size);
       promises.push(this.uncompressedSize(imageRef, layer as ImageLayer)
-        .then(size => details.uncompressedSizes.push(size)));
+        .then(size => uncompressedSizes.push(size)));
     }
 
-    details.compressedSizes.push(manifest.config.size);
-    details.uncompressedSizes.push(manifest.config.size);
+    compressedSizes.push(manifest.config.size);
+    uncompressedSizes.push(manifest.config.size);
 
     await Promise.all(promises);
 
-    return details;
+    return new ImageStatistics(imageRef, compressedSizes, uncompressedSizes);
   }
 
   async uncompressedSize(baseImageRef: ImageRef, layer: ImageLayer): Promise<number> {

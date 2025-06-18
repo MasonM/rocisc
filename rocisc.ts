@@ -52,10 +52,7 @@ const imageStats = await Promise.all(parsedImageRefs.map(imageRef => registry.ge
 console.log(printTable(imageStats));
 
 if (deltaBytes) {
-  for (const [i, imageStat] of imageStats.entries()) {
-    if (i == 0) {
-      continue;
-    }
+  for (const imageStat of imageStats) {
     const delta = imageStat['Uncompressed Size'] - imageStats[0]['Uncompressed Size'];
     if (delta > deltaBytes) {
       console.error(`ERROR: Delta exceeded. ${imageStat['Image']} is ${byteFormatter.format(delta)} larger than ${imageStats[0]['Image']}`);
