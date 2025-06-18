@@ -32,7 +32,7 @@ export class ImageRef {
 type ImageManifest = Record<string, any>;
 
 const totalArray = (arr: number[]): number => arr.reduce((a, b) => a + b, 0);
-const byteFormatter = new Intl.NumberFormat(undefined, {
+export const byteFormatter = new Intl.NumberFormat(undefined, {
   unit: 'byte',
   style: 'unit',
   unitDisplay: 'narrow',
@@ -77,41 +77,41 @@ type TableColName = 'Image' | 'Num Layers' | 'Compressed Size' | 'Uncompressed S
 class TableColFormatter {
   title: TableColName;
   maxLength: number;
-  rows: string[];
+  values: string[];
 
   constructor(title: TableColName) {
     this.title = title;
     this.maxLength = title.length;
-    this.rows = [];
+    this.values = [];
   }
 
   add(stats: ImageStatistics, baseline?: ImageStatistics) {
-    let row = '';
+    let value = '';
     let showDelta = false;
     switch (this.title) {
       case 'Image':
-        row += stats[this.title];
+        value += stats[this.title];
         break;
       case 'Num Layers':
-        row += stats[this.title].toString();
+        value += stats[this.title].toString();
         showDelta = true;
         break;
       case 'Uncompressed Size':
       case 'Compressed Size':
-        row += byteFormatter.format(stats[this.title]);
+        value += byteFormatter.format(stats[this.title]);
         showDelta = true;
         break;
       case 'Space Savings':
-        row += percentFormatter.format(stats[this.title]);
+        value += percentFormatter.format(stats[this.title]);
         break;
     }
     if (showDelta && baseline) {
-      row += deltaFormat(baseline[this.title] as number, stats[this.title] as number);
+      value += deltaFormat(baseline[this.title] as number, stats[this.title] as number);
     }
-    if (row.length > this.maxLength) {
-      this.maxLength = row.length;
+    if (value.length > this.maxLength) {
+      this.maxLength = value.length;
     }
-    this.rows.push(row);
+    this.values.push(value);
   }
 }
 
@@ -130,47 +130,19 @@ export function printTable(imageStats: ImageStatistics[]) {
       col.add(stats, i > 0 ? baseline : undefined);
     }
   }
-  const totalColWidth = cols.reduce((curr: number, col1: TableColFormatter): number => curr + col1.maxLength + 3, 1);
-  let table = '';
-  let first = true;
-  for (const [i, col] of cols.entries()) {
-    table += first ? '┌' : '┬';
-    first = false;
-    table += '─'.repeat(col.maxLength + 2);
-  }
-  table += '┐\n';
 
-  table += '│';
-  for (const col of cols) {
-    table += ` ${col.title.padEnd(col.maxLength)} │`
-  }
-  table += '\n';
+  const separators = cols.map(col => '─'.repeat(col.maxLength + 2));
+  const rows = [
+    '┌' + separators.join('┬') + '┐',
+    '│' + cols.map(col => ` ${col.title.padEnd(col.maxLength)} `).join('│') + '│',
+    '├' + separators.join('┼') + '┤',
+     ...Array.from(imageStats.keys()).map(i =>
+      '│' + cols.map(col => ` ${col.values[i].padEnd(col.maxLength)} `).join('│') + '│'
+     ),
+    '└' + separators.join('┴') + '┘',
+  ];
 
-  first = true;
-  for (const [i, col] of cols.entries()) {
-    table += first ? '├' : '┼';
-    first = false;
-    table += '─'.repeat(col.maxLength + 2);
-  }
-  table += '┤\n';
-
-  for (let i = 0; i < cols[0].rows.length; i++) {
-    table += '│';
-    for (const col of cols) {
-      table += ` ${col.rows[i].padEnd(col.maxLength)} │`
-    }
-    table += '\n';
-  }
-
-  first = true;
-  for (const [i, col] of cols.entries()) {
-    table += first ? '└' : '┴';
-    first = false;
-    table += '─'.repeat(col.maxLength + 2);
-  }
-  table += '┘\n';
-
-  return table;
+  return rows.join('\n');
 }
 
 // Reference: https://github.com/opencontainers/image-spec/blob/v1.0.1/image-index.md

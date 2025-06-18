@@ -10,6 +10,5 @@ $ node rocisc.ts library/alpine library/ubuntu --maxUncompressedDelta 1024
 │ library/alpine:latest │ 2          │ 3.797MB           │ 8.595MB           │ 55.82%        │
 │ library/ubuntu:latest │ 2          │ 29.72MB (+682.6%) │ 80.63MB (+838.1%) │ 63.14%        │
 └───────────────────────┴────────────┴───────────────────┴───────────────────┴───────────────┘
-
-ERROR: Delta exceeded: library/ubuntu:latest is 72032434 larger than library/alpine:latest
+ERROR: Delta exceeded: library/ubuntu:latest is 72.03MB larger than library/alpine:latest
 ```
